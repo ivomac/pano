@@ -1,7 +1,7 @@
 
 # CLI Panorama creator from RAW
 
-This script helps me manage and easily create panoramas from sequences of RAW images taken close in time and with equal shooting settings (shutter speed, ISO...).
+This script helps me manage and easily create panoramas from sequences of NEF (RAW) images taken close in time and with equal shooting settings (shutter speed, ISO...).
 
 ## Dependencies
 
