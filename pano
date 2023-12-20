@@ -1,0 +1,296 @@
+#!/usr/bin/env python
+
+import json
+import subprocess as sp
+
+from os import getenv
+from pathlib import Path
+from datetime import datetime
+from pickle import dump, load
+
+from argparse import ArgumentParser
+
+config = Path("./panoconfig.json")
+config = json.loads(config.read_text())
+
+
+parser = ArgumentParser()
+parser.add_argument(
+    "action",
+    choices=["list", "reject", "show", "make", "jpeg", "other_to_jpeg"],
+)
+parser.add_argument("index", nargs="+")
+parser.add_argument("-d", "--debug", action="store_true")
+parser.add_argument("-a", "--adjust", action="store_true")
+parser.add_argument("-b", "--background", action="store_true")
+parser.add_argument(
+    "-s",
+    "--style",
+    choices=config["styles"],
+    default=config["styles"][0],
+)
+parser.add_argument("-p", "--projections", default="0")
+
+args = parser.parse_args()
+
+F = {
+    "Panorama": Path("./Panorama"),
+    "TIFF": Path("./Panorama/TIFF"),
+    "JPEG": Path("./JPEG"),
+    "Project": Path("./Panorama/.project"),
+    "aTIFF": Path("./Panorama/.project/TIFF"),
+}
+
+cache = Path("./Panorama/.project/panoramas.pkl")
+
+IM_VIEWER = getenv("IMAGE", "sxiv")
+
+
+def main():
+    for d in F.values():
+        if not d.is_dir():
+            d.mkdir(parents=True)
+
+    if not cache.is_file():
+        metadata = get_metadata()
+        p = detect_panoramas(metadata)
+
+        dump(p, open(cache, "wb"))
+    else:
+        p = load(open(cache, "rb"))
+
+    if args.action == "list":
+        print_panoramas(p)
+    elif args.action == "reject":
+        for k in args.index:
+            p.pop(int(k))
+        dump(p, open(cache, "wb"))
+    elif args.action == "show":
+        for k in args.index:
+            thumbs = make(p[int(k)])
+            call([IM_VIEWER, "-f", *thumbs])
+    elif args.action == "make":
+        for k in args.index:
+            pano = [to_tiff(j) for j in p[int(k)]]
+            final = make(pano)
+            if not args.background:
+                call([IM_VIEWER, *final])
+    elif args.action == "jpeg":
+        jpegs = [to_jpeg(p) for p in F["Panorama"].glob("*.tiff")]
+        if not args.background:
+            call([IM_VIEWER, *jpegs])
+    elif args.action == "other_to_jpeg":
+        all_panos = [str(j) for k in p for j in k]
+        jpegs = [
+            to_jpeg(raw, style=args.style)
+            for raw in Path(".").glob("*.NEF")
+            if str(raw) not in all_panos
+        ]
+        if not args.background:
+            call([IM_VIEWER, *jpegs])
+
+    for f in F["aTIFF"].glob("*"):
+        f.unlink()
+
+    return
+
+
+def print_panoramas(p):
+    for i in range(len(p)):
+        pstr = "\n".join([str(k) for k in p[i]])
+        print(f"{i}:\n{pstr}")
+    return
+
+
+def get_metadata():
+    time_key = "DateTimeOriginal"
+
+    keys = {
+        "FNumber",
+        "ExposureTime",
+        "ExposureProgram",
+        "ISOSpeedRatings",
+        "SensitivityType",
+        "RecommendedExposureIndex",
+        "ExposureBiasValue",
+        "MaxApertureValue",
+        "MeteringMode",
+        "LightSource",
+        "Flash",
+        "FocalLength",
+        "SensingMethod",
+        "ExposureMode",
+        "WhiteBalance",
+        "SceneCaptureType",
+        "GainControl",
+        "Contrast",
+        "Saturation",
+        "Sharpness",
+    }
+
+    metadata = dict()
+    for f in Path(".").glob("*.NEF"):
+        meta = (
+            sp.check_output(
+                ["exiv2", "-g", "Exif.Photo", "-Pkv", str(f)], text=True
+            )
+            .rstrip("\n")
+            .split("\n")
+        )
+
+        s = f.name
+        metadata[s] = dict(attrs=dict(), time=dict())
+        for m in meta:
+            k, v = m.split(None, maxsplit=1)
+            k = k.split(".")[-1]
+            if k in keys:
+                metadata[s]["attrs"][k] = v
+            elif k == time_key:
+                metadata[s]["time"] = datetime.strptime(
+                    v, "%Y:%m:%d %H:%M:%S"
+                )
+
+    return metadata
+
+
+def detect_panoramas(metadata):
+    exc = set()
+    p = list()
+    for p1 in metadata:
+        if p1 not in exc:
+            p.append([p1])
+            exc.add(p1)
+            for p2 in metadata.keys() - exc:
+                if metadata[p1]["attrs"] == metadata[p2]["attrs"]:
+                    p[-1].append(p2)
+                    exc.add(p2)
+
+    for s in range(len(p)):
+        p[s].sort(key=lambda x: metadata[x]["time"])
+        for k in range(len(p[s]) - 1, 0, -1):
+            timediff = (
+                metadata[p[s][k]]["time"] - metadata[p[s][k - 1]]["time"]
+            )
+            if timediff.total_seconds() > 4:
+                p.append(p[s][k:])
+                del p[s][k:]
+
+    for s in range(len(p) - 1, -1, -1):
+        if len(p[s]) == 1:
+            del p[s]
+
+    for s in range(len(p)):
+        for k in range(len(p[s])):
+            p[s][k] = Path(p[s][k])
+
+    return p
+
+
+def to_tiff(raw, style=args.style):
+    outfile = F["TIFF"] / f"{Path(raw).stem}.{style}.tif"
+    if not outfile.is_file():
+        print(f"Converting {Path(raw).name} to TIFF (style={style})")
+        call(
+            [
+                "darktable-cli",
+                raw,
+                outfile,
+                "--style-overwrite",
+                "--style",
+                style,
+            ]
+        )
+    return outfile
+
+
+def to_jpeg(pano, style=None):
+    if style is not None:
+        outfile = F["JPEG"] / f"{pano.stem}.{style}.jpg"
+        args = ["--style-overwrite", "--style", style]
+    else:
+        outfile = F["JPEG"] / f"{pano.stem}.jpg"
+        args = []
+
+    if not outfile.is_file():
+        print(f"Converting {pano.name} to JPEG (style={style})")
+        call(["darktable-cli", pano, outfile, *args])
+    return outfile
+
+
+def make(pano, adjust=args.adjust):
+    adj = "a" if adjust else "n"
+
+    ext = Path(pano[0]).suffix[1:]
+
+    prefix = "-".join([pano[i].name.split(".")[0] for i in [0, -1]])
+    prefix = f"{prefix}.{args.style}.{adj}"
+
+    pr = F["Project"] / f"{prefix}.pto"
+    if pr.is_file():
+        pr.unlink()
+
+    call(["pto_gen", *pano, "-o", pr])
+    call(["cpfind", "--celeste", "-o", pr, pr])
+    call(["cpclean", "-o", pr, pr])
+    call(["linefind", "--lines", "3", "-o", pr, pr])
+    call(["autooptimiser", "-a", "-l", "-m", "-s", "-o", pr, pr])
+
+    of = []
+    for P in args.projections.split(","):
+        if P.isdigit():
+            i = P
+            name = config["projections"][int(P)]
+        else:
+            i = str(config["projections"].index(P))
+            name = P
+
+        out_folder = "aTIFF" if ext == "NEF" else "Panorama"
+        of.append(F[out_folder] / f"{prefix}.{name}.tiff")
+
+        projs = F["aTIFF"] / f"{prefix}.{name}."
+
+        call(
+            [
+                "pano_modify",
+                "--projection",
+                i,
+                "--fov",
+                "AUTO",
+                "--canvas",
+                "AUTO",
+                "--straighten",
+                "--center",
+                "--crop",
+                "0,100,0,100%",
+                "--output-type",
+                "NORMAL",
+                "-o",
+                pr,
+                pr,
+            ]
+        )
+
+        if adjust:
+            print("Adjusting Panorama...")
+            call(["hugin", pr])
+
+        print("Creating Panorama...")
+        call(["nona", "-z", "NONE", "-o", projs, "-m", "TIFF_m", pr, *pano])
+        call(
+            [
+                "enblend",
+                "-o",
+                of[-1],
+                *projs.parent.glob(f"{prefix}.{name}.*.tif"),
+            ]
+        )
+
+    return of
+
+
+def call(cmd, debug=args.debug):
+    sp.run(cmd, stdout=sp.DEVNULL, stderr=sp.DEVNULL)
+    return
+
+
+main()

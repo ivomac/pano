@@ -1,0 +1,35 @@
+{
+	"styles": [
+		"WB-Camera",
+		"WB-Sunlight",
+		"WB-Cloudy",
+		"WB-Shade"
+	],
+	"projections": [
+		"rectilinear",
+		"circular",
+		"equirectangular",
+		"fisheye_ff",
+		"stereographic",
+		"mercator",
+		"trans_mercator",
+		"sinusoidal",
+		"lambert_equal_area_conic",
+		"lambert_azimuthal",
+		"albers_equal_area_conic",
+		"miller_cylindrical",
+		"panini",
+		"architectural",
+		"orthographic",
+		"equisolid",
+		"equi_panini",
+		"biplane",
+		"triplane",
+		"panini_general",
+		"thoby",
+		"hammer"
+	]
+}
+
+
+
