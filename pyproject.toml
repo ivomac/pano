@@ -1,0 +1,40 @@
+
+[build-system]
+requires = ["setuptools>=42", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "panorama_manager"
+version = "0.1.0"
+description = "A package to manage panorama and RAW file images on the terminal."
+readme = "README.md"
+requires-python = ">=3.7"
+dependencies = [
+	"pandas"
+]
+
+[project.scripts]
+pano = "libpano.__main__:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.ruff]
+line-length = 88
+indent-width = 4
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "D", "I", "N", "S", "T", "UP", "B", "SIM", "R"]
+ignore = ["B019", "S603", "S607", "S101"]
+
+fixable = ["ALL"]
+unfixable = []
+
+[tool.ruff.format]
+docstring-code-format = true
+docstring-code-line-length = "dynamic"
+
