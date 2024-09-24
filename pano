@@ -80,7 +80,6 @@ def main():
     elif ARGS.action == "show":
         for k in ARGS.index:
             thumbs = make(p[int(k)])
-            print(thumbs)
             call([IMAGE_VIEWER, *thumbs])
     elif ARGS.action == "make":
         for k in ARGS.index:
