@@ -33,7 +33,7 @@ def parse_args():
     parser = ArgumentParser()
     parser.add_argument(
         "action",
-        choices=["list", "reject", "show", "make", "jpeg", "other_to_jpeg"],
+        choices=["list", "reject", "show", "make", "to_jpeg", "singles_to_jpeg"],
     )
     parser.add_argument("index", nargs="*")
     parser.add_argument("-d", "--debug", action="store_true")
@@ -71,27 +71,31 @@ def main():
         with open(cache, "rb") as f:
             p = load(f)
 
+    index = ARGS.index
+    if not index:
+        index = range(len(p))
+
     if ARGS.action == "list":
         print_panoramas(p)
     elif ARGS.action == "reject":
-        for k in ARGS.index:
+        for k in index:
             p.pop(int(k))
         dump(p, open(cache, "wb"))
     elif ARGS.action == "show":
-        for k in ARGS.index:
+        for k in index:
             thumbs = make(p[int(k)])
             call([IMAGE_VIEWER, *thumbs])
     elif ARGS.action == "make":
-        for k in ARGS.index:
+        for k in index:
             pano = [to_tiff(j) for j in p[int(k)]]
             final = make(pano)
             if ARGS.open:
                 call([IMAGE_VIEWER, *final])
-    elif ARGS.action == "jpeg":
+    elif ARGS.action == "to_jpeg":
         jpegs = [to_jpeg(p) for p in F["Panorama"].glob("*.tiff")]
         if ARGS.open:
             call([IMAGE_VIEWER, *jpegs])
-    elif ARGS.action == "other_to_jpeg":
+    elif ARGS.action == "singles_to_jpeg":
         all_panos = [str(j) for k in p for j in k]
         jpegs = [to_jpeg(raw) for raw in Path(".").glob("*.NEF") if str(raw) not in all_panos]
         if ARGS.open:
