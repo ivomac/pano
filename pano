@@ -8,7 +8,7 @@ from pathlib import Path
 from datetime import datetime
 from pickle import dump, load
 
-from argparse import ArgumentParser
+from argparse import ArgumentParser, RawTextHelpFormatter
 
 CONFIG_PATH = Path(environ["XDG_CONFIG_HOME"]) / "pano" / "config.json"
 CONFIG = json.loads(CONFIG_PATH.read_text())
@@ -30,15 +30,51 @@ VIDEO_VIEWER = environ.get("VIDEO", "xdg-open")
 
 
 def parse_args():
-    parser = ArgumentParser()
+    parser = ArgumentParser(
+        description="Process and create panoramas from RAW images",
+        epilog="""Example:
+    pano list
+    pano make -a -p rectilinear 0 1 2
+    pano to_jpeg
+    pano singles_to_jpeg
+        """,
+        formatter_class=RawTextHelpFormatter,
+    )
     parser.add_argument(
         "action",
         choices=["list", "reject", "show", "make", "to_jpeg", "singles_to_jpeg"],
+        help="""Action to perform.
+    list: List detected panoramas
+    reject: Reject a panorama by index
+    show: Show a detected panorama by index
+    make: Create a panorama by index
+    to_jpeg: Convert all panoramas to JPEG
+    singles_to_jpeg: Convert all single images to JPEG
+        """,
     )
-    parser.add_argument("index", nargs="*")
-    parser.add_argument("-d", "--debug", action="store_true")
-    parser.add_argument("-a", "--adjust", action="store_true")
-    parser.add_argument("-o", "--open", action="store_true")
+    parser.add_argument(
+        "index",
+        nargs="*",
+        help="Index of panorama(s) to process",
+    )
+    parser.add_argument(
+        "-d",
+        "--debug",
+        action="store_true",
+        help="Print debug info",
+    )
+    parser.add_argument(
+        "-a",
+        "--adjust",
+        action="store_true",
+        help="Adjust panorama interactively",
+    )
+    parser.add_argument(
+        "-o",
+        "--open",
+        action="store_true",
+        help="Open output files after creation",
+    )
     parser.add_argument(
         "-s",
         "--style",
